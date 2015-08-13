@@ -1,6 +1,8 @@
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -14,35 +16,53 @@ import org.kohsuke.args4j.Option;
 
 public class SummarizeHistogramLogRange {
 
-    @Option(name="-s",usage="relative log start time in seconds, defaults to 0.0", required=false)
-    double start = 0.0;
-    @Option(name="-e",usage="relative log end time in seconds, defaults to MAX_DOUBLE", required=false)
-    double end = Double.MAX_VALUE;
+    @Option(name = "-s", usage = "relative log start time in seconds, defaults to 0.0", required = false)
+    public double start = 0.0;
+    @Option(name = "-e", usage = "relative log end time in seconds, defaults to MAX_DOUBLE", required = false)
+    public double end = Double.MAX_VALUE;
 
     private File inputPath = new File(".");
     Set<File> inputFiles = new HashSet<>();
-    @Option(name="-v",usage="verbose logging, defaults to false", required=false)
-    boolean verbose = false;
+    @Option(name = "-v", usage = "verbose logging, defaults to false", required = false)
+    public boolean verbose = false;
+    private File outputFile;
 
-	public static void main(String[] args) throws Exception {
-	    SummarizeHistogramLogRange app = new SummarizeHistogramLogRange();
-	    CmdLineParser parser = new CmdLineParser(app);
-	    try {
+    public static void main(String[] args) throws Exception {
+        SummarizeHistogramLogRange app = new SummarizeHistogramLogRange();
+        CmdLineParser parser = new CmdLineParser(app);
+        try {
             parser.parseArgument(args);
             app.execute();
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
             parser.printUsage(System.out);
         }
-	}
+    }
 
-	public void execute() throws FileNotFoundException {
+    public void execute() throws FileNotFoundException {
 
+        if (verbose) {
+            if (end != Double.MAX_VALUE)
+                System.out.printf("start:%.2f end:%.2f path:%s\n", start, end, inputPath.getAbsolutePath());
+            else
+                System.out.printf("start:%.2f end: MAX path:%s\n", start, inputPath.getAbsolutePath());
+        }
+        if (inputFiles.isEmpty())
+            return;
+        PrintStream report = System.out;
+        if(outputFile != null) {
+            report = new PrintStream(new FileOutputStream(outputFile));
+        }
+        summarizeAndPrint(report);
+    }
+
+    private void summarizeAndPrint(PrintStream out) throws FileNotFoundException {
         Histogram sum = new Histogram(3);
         long period = 0;
         for (File inputFile : inputFiles) {
+            if (verbose)
+                System.out.println("Summarizing file:" + inputFile.getName());
             HistogramLogReader reader = new HistogramLogReader(inputFile);
-
             Histogram interval;
             while ((interval = (Histogram) reader.nextIntervalHistogram(start, end)) != null) {
                 sum.add(interval);
@@ -52,29 +72,32 @@ public class SummarizeHistogramLogRange {
             sum.setStartTimeStamp(Long.MAX_VALUE);
             period += sumPeriod;
         }
+
         double avgThpt = (sum.getTotalCount() * 1000.0) / period;
-        System.out.printf("TotalCount=%d\n", sum.getTotalCount());
-        System.out.printf("Period(ms)=%d\n", period);
-        System.out.printf("Throughput(ops/sec)=%.2f\n", avgThpt);
-        System.out.printf("Min=%d\n", sum.getMinValue());
-        System.out.printf("Mean=%.2f\n", sum.getMean());
-        System.out.printf("50.000ptile=%d\n", sum.getValueAtPercentile(50));
-        System.out.printf("90.000ptile=%d\n", sum.getValueAtPercentile(90));
-        System.out.printf("99.000ptile=%d\n", sum.getValueAtPercentile(99));
-        System.out.printf("99.900ptile=%d\n", sum.getValueAtPercentile(99.9));
-        System.out.printf("99.990ptile=%d\n", sum.getValueAtPercentile(99.99));
-        System.out.printf("99.999ptile=%d\n", sum.getValueAtPercentile(99.999));
-        System.out.printf("Max=%d\n", sum.getMaxValue());
-	}
-    @Option(name = "-inputPath", aliases={"-ip"}, usage = "set path to use for input files, defaults to current folder", required = false)
+        out.printf("TotalCount=%d\n", sum.getTotalCount());
+        out.printf("Period(ms)=%d\n", period);
+        out.printf("Throughput(ops/sec)=%.2f\n", avgThpt);
+        out.printf("Min=%d\n", sum.getMinValue());
+        out.printf("Mean=%.2f\n", sum.getMean());
+        out.printf("50.000ptile=%d\n", sum.getValueAtPercentile(50));
+        out.printf("90.000ptile=%d\n", sum.getValueAtPercentile(90));
+        out.printf("99.000ptile=%d\n", sum.getValueAtPercentile(99));
+        out.printf("99.900ptile=%d\n", sum.getValueAtPercentile(99.9));
+        out.printf("99.990ptile=%d\n", sum.getValueAtPercentile(99.99));
+        out.printf("99.999ptile=%d\n", sum.getValueAtPercentile(99.999));
+        out.printf("Max=%d\n", sum.getMaxValue());
+    }
+
+    @Option(name = "-inputPath", aliases = {"-ip" }, usage = "set path to use for input files, defaults to current folder", required = false)
     public void setInputPath(String inputFolderName) {
         inputPath = new File(inputFolderName);
         if (!inputPath.exists())
-            throw new IllegalArgumentException("inputPath must exist!");
+            throw new IllegalArgumentException("inputPath:"+inputFolderName+" must exist!");
         if (!inputPath.isDirectory())
-            throw new IllegalArgumentException("inputPath must be a directory!");
+            throw new IllegalArgumentException("inputPath:"+inputFolderName+" must be a directory!");
     }
-    @Option(name = "-inputFile", aliases={"-if"}, usage = "add an input hdr log, also takes regexp", required = false)
+
+    @Option(name = "-inputFile", aliases = {"-if" }, usage = "add an input hdr log from input path, also takes regexp", required = false)
     public void addInputFile(String inputFile) {
         final Predicate<String> predicate = Pattern.compile(inputFile).asPredicate();
         inputFiles.addAll(Arrays.asList(inputPath.listFiles(new FileFilter() {
@@ -84,7 +107,17 @@ public class SummarizeHistogramLogRange {
             }
         })));
     }
+    @Option(name = "-inputFilePath", aliases = {"-ifp" }, usage = "add an input file by path relative to working dir or absolute", required = false)
+    public void addInputFileAbs(String inputFileName) {
+        File in = new File(inputFileName);
+        if (!in.exists())
+            throw new IllegalArgumentException("file:"+inputFileName+" must exist!");
+        inputFiles.add(in);
+    }
 
-
+    @Option(name = "-outputFile", aliases = {"-of" }, usage = "set an output file destination, default goes to sysout", required = false)
+    public void setOutputFile(String outputFileName) {
+        outputFile = new File(outputFileName);
+    }
 
 }
