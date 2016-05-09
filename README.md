@@ -88,4 +88,4 @@ The above union will use absolute time so the result will be as if all load gene
 
 If each load generator represents a different operation you could use tags to differentiate them in the union:
 
-$ hodor UnionHistogramLogs -tif READ=load-gen1.hdr -tif READ=load-gen2.hdr -tif WRITE=load-gen3.hdr -of union-load-gens.hdr
+    $ hodor UnionHistogramLogs -tif READ=load-gen1.hdr -tif READ=load-gen2.hdr -tif WRITE=load-gen3.hdr -of union-load-gens.hdr
