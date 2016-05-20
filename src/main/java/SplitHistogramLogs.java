@@ -43,14 +43,19 @@ public class SplitHistogramLogs {
 
     }
 
-    @Option(name = "-filterTag", aliases = "-ft", usage = "add a tag to filter from input, 'default' is a special tag for the null tag.", required = false)
-    public void addFilterTag(String tag) {
-        filterTags.add(tag);
+    @Option(name = "-excludeTag", aliases = "-et", usage = "add a tag to filter from input, 'default' is a special tag for the null tag.", required = false)
+    public void addExcludeTag(String tag) {
+        excludeTags.add(tag);
+    }
+    @Option(name = "-includeTag", aliases = "-it", usage = "when include tags are used only the explicitly included will be split out, 'default' is a special tag for the null tag.", required = false)
+    public void addIncludeTag(String tag) {
+        includeTags.add(tag);
     }
 
     private File inputPath = new File(".");
     private File inputFile;
-    private Set<String> filterTags = new HashSet<>();
+    private Set<String> excludeTags = new HashSet<>();
+    private Set<String> includeTags = new HashSet<>();
 
     public static void main(String[] args) throws Exception {
         SplitHistogramLogs app = new SplitHistogramLogs();
@@ -83,7 +88,7 @@ public class SplitHistogramLogs {
         int i = 0;
         while ((interval = (Histogram) reader.nextIntervalHistogram(start, end)) != null) {
             String ntag = interval.getTag();
-            if ((ntag == null && filterTags.contains("default")) || filterTags.contains(ntag)) {
+            if (shouldSkipTag(ntag)) {
                 if (verbose) {
                     String tag = (ntag == null) ? "(skipped:default) " : "(skipped:"+ntag+") ";
                     logHistogramForVerbose(interval, i, tag);
@@ -101,6 +106,12 @@ public class SplitHistogramLogs {
             }
 
         }
+    }
+
+    private boolean shouldSkipTag(String ntag)
+    {
+        ntag = (ntag == null) ? "default" : ntag;
+        return excludeTags.contains(ntag) || (!includeTags.isEmpty() && !includeTags.contains(ntag));
     }
 
     private void logHistogramForVerbose(Histogram interval, int i, String ntag) {
