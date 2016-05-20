@@ -1,17 +1,9 @@
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
 
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.HistogramLogReader;
@@ -39,11 +31,16 @@ public class SplitHistogramLogs {
             throw new IllegalArgumentException("inputPath:" + inputFolderName + " must be a directory!");
     }
 
-    @Option(name = "-inputFile", aliases = "-if", usage = "set the input hdr log from input path, also takes regexp", required = true)
+    @Option(name = "-inputFile", aliases = "-if", usage = "set the input hdr log from input path", required = true)
     public void setInputFile(String inputFileName) {
         inputFile = new File(inputPath, inputFileName);
-        if (!inputFile.exists())
-            throw new IllegalArgumentException("inputFile:" + inputFile.getAbsolutePath() + " must exist!");
+        if (!inputFile.exists()) {
+
+            inputFile = new File(inputFileName);
+            if (!inputFile.exists())
+                throw new IllegalArgumentException("inputFile:" + inputFileName+ " must exist!");
+        }
+
     }
 
     @Option(name = "-filterTag", aliases = "-ft", usage = "add a tag to filter from input, 'default' is a special tag for the null tag.", required = false)
