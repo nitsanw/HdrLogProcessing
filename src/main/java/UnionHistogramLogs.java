@@ -31,7 +31,7 @@ public class UnionHistogramLogs {
     @Option(name = "-verbose", aliases = "-v", usage = "verbose logging, (default: false)", required = false)
     public boolean verbose = false;
 
-    @Option(name = "-relative", aliases = "-r", usage = "relative timeline merge, (default: true)", required = false)
+    @Option(name = "-relative", aliases = "-r", usage = "relative timeline merge, (default: false)", required = false)
     public boolean relative = false;
 
     @Option(name = "-inputPath", aliases = "-ip", usage = "set path to use for input files, defaults to current folder", required = false)
@@ -129,7 +129,9 @@ public class UnionHistogramLogs {
         }
 
         private void read() {
+            do {
             next = (Histogram) reader.nextIntervalHistogram(start, end);
+            } while (next == null && reader.hasNext());
             if (next == null)
                 return;
 

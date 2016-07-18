@@ -15,7 +15,7 @@ import org.HdrHistogram.HistogramLogReader;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
 
-public class SummarizeHistogramLogRange {
+public class SummarizeHistogramLogs {
 
     enum SummaryType {
         CSV, PERCENTILES, HGRM
@@ -23,6 +23,9 @@ public class SummarizeHistogramLogRange {
 
     @Option(name="-ignoreTag", aliases="-it", usage="summary should not be split by tag, (default: false)", required=false)
     public boolean ignoreTag = false;
+
+    @Option(name="-ignoreTimeStamps", aliases="-its", usage="summary should ignore time stamps for period calculation, use interval length instead, (default: false)", required=false)
+    public boolean ignoreTimeStamps = false;
 
     @Option(name="-start", aliases="-s", usage="relative log start time in seconds, (default: 0.0)", required=false)
     public double start = 0.0;
@@ -44,6 +47,9 @@ public class SummarizeHistogramLogRange {
 
     @Option(name="-outputBucketSize", aliases="-obs", usage="csv output bucket size, (default: 100)", required=false)
     public long outputBucketSize = 100;
+
+    @Option(name="-outputFile", aliases="-of", usage="set an output file destination, default goes to sysout", required=false)
+    public String outputFile;
 
     @Option(name="-inputPath", aliases="-ip", usage="set path to use for input files, defaults to current folder", required=false)
     public void setInputPath(String inputFolderName) {
@@ -72,18 +78,15 @@ public class SummarizeHistogramLogRange {
         inputFiles.add(in);
     }
 
-    @Option(name="-outputFile", aliases="-of", usage="set an output file destination, default goes to sysout", required=false)
-    public void setOutputFile(String outputFileName) {
-        outputFile = new File(outputFileName);
-    }
+
 
 
     private File inputPath = new File(".");
     private Set<File> inputFiles = new HashSet<>();
-    private File outputFile;
+
 
     public static void main(String[] args) throws Exception {
-        SummarizeHistogramLogRange app = new SummarizeHistogramLogRange();
+        SummarizeHistogramLogs app = new SummarizeHistogramLogs();
         CmdLineParser parser = new CmdLineParser(app);
         try {
             parser.parseArgument(args);
@@ -103,26 +106,28 @@ public class SummarizeHistogramLogRange {
         }
         if (inputFiles.isEmpty())
             return;
-        PrintStream report = System.out;
-        if (outputFile != null) {
-            report = new PrintStream(new FileOutputStream(outputFile));
-        }
-        summarizeAndPrint(report);
+
+        summarizeAndPrint();
     }
 
-    private void summarizeAndPrint(PrintStream out) throws FileNotFoundException {
+    private void summarizeAndPrint() throws FileNotFoundException {
         Map<String, Histogram> sumByTag= new HashMap<>();
 
         long period = 0;
+        long intervalLengthSum = 0;
         for (File inputFile : inputFiles) {
             if (verbose)
                 System.out.println("Summarizing file: " + inputFile.getName());
             HistogramLogReader reader = new HistogramLogReader(inputFile);
             Histogram interval;
             int i = 0;
-            while ((interval = (Histogram) reader.nextIntervalHistogram(start, end)) != null) {
+            while (reader.hasNext()) {
+                interval = (Histogram) reader.nextIntervalHistogram(start, end);
+                if (interval == null)
+                    continue;
                 String ntag = ignoreTag ? null : interval.getTag();
                 Histogram sum = sumByTag.computeIfAbsent(ntag, k -> {Histogram h = new Histogram(3); h.setTag(k); return h;});
+                intervalLengthSum += (interval.getEndTimeStamp() - interval.getStartTimeStamp());
                 sum.add(interval);
                 if (verbose) {
                     String tag = (sum.getTag() == null) ? "" : "("+sum.getTag()+") ";
@@ -137,6 +142,7 @@ public class SummarizeHistogramLogRange {
                             (long) (interval.getValueAtPercentile(99.9) / outputValueUnitRatio));
                 }
             }
+            // calculate period
             long maxPeriod = 0;
             for (Histogram sum : sumByTag.values()) {
                 long sumPeriod = (sum.getEndTimeStamp() - sum.getStartTimeStamp());
@@ -157,7 +163,12 @@ public class SummarizeHistogramLogRange {
             }
             period += maxPeriod;
         }
+        if(ignoreTimeStamps) {
+            period = intervalLengthSum;
+        }
         for (Histogram sum : sumByTag.values()) {
+            String tag = (sum.getTag() == null) ? "" : "." + sum.getTag();
+            PrintStream out = getOut(tag);
             switch (summaryType) {
             case PERCENTILES:
                 printPercentiles(out, sum, period);
@@ -172,6 +183,15 @@ public class SummarizeHistogramLogRange {
                 throw new IllegalStateException();
             }
         }
+    }
+
+    private PrintStream getOut(String tag) throws FileNotFoundException
+    {
+        PrintStream report = System.out;
+        if (outputFile != null) {
+            report = new PrintStream(new FileOutputStream(outputFile+tag+".hgrm"));
+        }
+        return report;
     }
 
     private void printHgrm(PrintStream out, Histogram sum) {

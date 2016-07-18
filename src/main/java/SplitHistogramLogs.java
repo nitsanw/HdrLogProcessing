@@ -86,7 +86,10 @@ public class SplitHistogramLogs {
         Map<String, HistogramLogWriter> writerByTag = new HashMap<>();
         Histogram interval;
         int i = 0;
-        while ((interval = (Histogram) reader.nextIntervalHistogram(start, end)) != null) {
+        while (reader.hasNext()) {
+            interval = (Histogram) reader.nextIntervalHistogram(start, end);
+            if (interval == null)
+                continue;
             String ntag = interval.getTag();
             if (shouldSkipTag(ntag)) {
                 if (verbose) {
