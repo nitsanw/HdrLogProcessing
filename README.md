@@ -12,7 +12,7 @@ For brevity in the following examples, lets assume you built the project and add
 ## Summary tool
 Using the above alias run:
 
-    $ hodor SummarizeHistogramLogsRange [...]
+    $ hodor SummarizeHistogramLogs [...]
 
 SummarizeHistogramLogsRange supports the following options:
 
@@ -47,17 +47,17 @@ This is useful when for example you are face with a histogram log you have colle
 
 Now perhaps the first 200 seconds of this run are an unstable warmup period I wish to exclude from my summary:
 
-    $ hodor SummarizeHistogramLogsRange -if my-awesome-app-latencies.hdr -s 200
+    $ hodor SummarizeHistogramLogs -if my-awesome-app-latencies.hdr -s 200
 
 Or maybe I got several logs, from several runs and I want an overall summary, excluding the first 60 seconds of the run and saving the output into a file:
 
-    $ hodor SummarizeHistogramLogsRange -if run1.hdr -if run2.hdr -if run3.hdr -s 60 -of runs-summary.out
+    $ hodor SummarizeHistogramLogs -if run1.hdr -if run2.hdr -if run3.hdr -s 60 -of runs-summary.out
 
     -OR you could use a regexp to get all the files-
 
-    $ hodor SummarizeHistogramLogsRange -if ^run.*.hdr -s 60 -of runs-summary.out
+    $ hodor SummarizeHistogramLogs -if ^run.*.hdr -s 60 -of runs-summary.out
 
-The default output is percentiles as shown above. We support HGRM output if you wish to plot the result with the useful plotter in HdrHistogram, and a CSV format to enable statistical analysis with other tools.
+The default output is percentiles as shown above. We support HGRM output if you wish to plot the result with the useful plotter in HdrHistogram, and a CSV format to enable statistical analysis with other tools. The HGRM output with an output file will result in a file per tagged summary with the convention of: _outputfile.tag.hgrm_
 
 The summary tool supports tags, and if your logs contains histograms of different tags they will get summarized separately. You can use the '-it|ignoreTag' option to summarize all tags together.
 
