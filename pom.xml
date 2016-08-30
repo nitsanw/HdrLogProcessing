@@ -11,9 +11,7 @@
 		<dependency>
 			<groupId>org.hdrhistogram</groupId>
 			<artifactId>HdrHistogram</artifactId>
-			<!-- Please build from source at https://github.com/nitsanw/HdrHistogram/tree/logreader-hasnext -->
-			<!-- This is temporary until the PR is accepted or the issue is resolved some other way. Sorry -->
-			<version>2.1.9-SNAPSHOT</version>
+			<version>2.1.8</version>
 		</dependency>
 		<dependency>
 			<groupId>args4j</groupId>
