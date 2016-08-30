@@ -3,6 +3,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -121,18 +122,33 @@ public class SummarizeHistogramLogs {
             HistogramLogReader reader = new HistogramLogReader(inputFile);
             Histogram interval;
             int i = 0;
+            boolean first = true;
+            long startTime = 0;
+
             while (reader.hasNext()) {
                 interval = (Histogram) reader.nextIntervalHistogram(start, end);
                 if (interval == null)
                     continue;
+                if (first) {
+                    first = false;
+                    startTime = interval.getStartTimeStamp();
+                    if (verbose)
+                    {
+                        System.out.println("StartTime: " + new Date(startTime));
+                    }
+
+                }
                 String ntag = ignoreTag ? null : interval.getTag();
                 Histogram sum = sumByTag.computeIfAbsent(ntag, k -> {Histogram h = new Histogram(3); h.setTag(k); return h;});
-                intervalLengthSum += (interval.getEndTimeStamp() - interval.getStartTimeStamp());
+                final long intervalLength = interval.getEndTimeStamp() - interval.getStartTimeStamp();
+                intervalLengthSum += intervalLength;
                 sum.add(interval);
                 if (verbose) {
                     String tag = (sum.getTag() == null) ? "" : "("+sum.getTag()+") ";
-                    System.out.printf("%s%d: [count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d]\n",
-                            tag, i++,
+                    System.out.printf("%s%d: [time=%.3f,count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d]\n",
+                            tag,
+                            i++,
+                            (interval.getStartTimeStamp() - startTime)/1000.0,
                             interval.getTotalCount(),
                             (long) (interval.getMinValue() / outputValueUnitRatio),
                             (long) (interval.getMaxValue() / outputValueUnitRatio),
