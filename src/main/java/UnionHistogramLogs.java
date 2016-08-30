@@ -51,6 +51,11 @@ public class UnionHistogramLogs {
         })));
     }
 
+    @Option(name = "-inputFileAbsolute", aliases = "-ifa", usage = "add an input hdr log file by absolute path, also takes regexp", required = false)
+    public void addInputFileAbsolute(String inputFile) {
+        inputFiles.add(new File(inputFile));
+    }
+
     @Option(name = "-taggedInputFile", aliases = "-tif", usage = "a <tag>=<filename> add an input file, tag all histograms from this file with tag. If histograms have a tag it will be conactanated to file tag.", required = false)
     public void addInputFileAbs(String inputFileNameAndTag) {
         String[] args = inputFileNameAndTag.split("=");
