@@ -60,7 +60,7 @@ public class UnionHistogramLogs {
     public void addInputFileAbs(String inputFileNameAndTag) {
         String[] args = inputFileNameAndTag.split("=");
         if (args.length != 2)
-            throw new IllegalArgumentException("This value:" + inputFileNameAndTag + " should be a <tag>=<file>, niether tag nor filename allow the '=' char");
+            throw new IllegalArgumentException("This value:" + inputFileNameAndTag + " should be a <tag>=<file>, neither tag nor filename allow the '=' char");
         String tag = args[0];
         String inputFileName = args[1];
         File in = new File(inputFileName);
