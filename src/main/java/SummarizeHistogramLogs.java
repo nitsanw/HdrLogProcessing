@@ -139,7 +139,9 @@ public class SummarizeHistogramLogs {
 
                 }
                 String ntag = ignoreTag ? null : interval.getTag();
-                Histogram sum = sumByTag.computeIfAbsent(ntag, k -> {Histogram h = new Histogram(3); h.setTag(k); return h;});
+                final int numberOfSignificantValueDigits = interval.getNumberOfSignificantValueDigits();
+                Histogram sum = sumByTag.computeIfAbsent(ntag, k -> {Histogram h = new Histogram(
+                    numberOfSignificantValueDigits); h.setTag(k); return h;});
                 final long intervalLength = interval.getEndTimeStamp() - interval.getStartTimeStamp();
                 intervalLengthSum += intervalLength;
                 sum.add(interval);

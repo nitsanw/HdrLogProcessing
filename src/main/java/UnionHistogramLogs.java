@@ -214,7 +214,7 @@ public class UnionHistogramLogs {
             HistogramIterator input = ins.get(0);
             Histogram next = input.next();
             Histogram union = unionedByTag.computeIfAbsent(next.getTag(), k -> {
-                Histogram h = new Histogram(3);
+                Histogram h = new Histogram(next.getNumberOfSignificantValueDigits());
                 h.setTag(k);
                 return h;
             });
