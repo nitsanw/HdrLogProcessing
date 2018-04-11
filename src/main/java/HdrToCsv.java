@@ -6,6 +6,7 @@ import org.kohsuke.args4j.Option;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.nio.file.Paths;
+import java.util.Locale;
 
 public class HdrToCsv
 {
@@ -50,17 +51,18 @@ public class HdrToCsv
         while (reader.hasNext())
         {
             Histogram interval = (Histogram) reader.nextIntervalHistogram();
-            System.out.println(interval.getStartTimeStamp() + "," +
-                               interval.getTotalCount() + "," +
-                               interval.getMinValue() + "," +
-                               ((long) interval.getMean()) + "," +
-                               interval.getValueAtPercentile(50) + "," +
-                               interval.getValueAtPercentile(90) + "," +
-                               interval.getValueAtPercentile(95) + "," +
-                               interval.getValueAtPercentile(99) + "," +
-                               interval.getValueAtPercentile(99.9) + "," +
-                               interval.getValueAtPercentile(99.99) + "," +
-                               interval.getMaxValue());
+            System.out.printf(Locale.US,
+                    "%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d%n",
+                    interval.getStartTimeStamp() / 1000.0,
+                    interval.getTotalCount(), interval.getMinValue(),
+                    (long) interval.getMean(),
+                    interval.getValueAtPercentile(50),
+                    interval.getValueAtPercentile(90),
+                    interval.getValueAtPercentile(95),
+                    interval.getValueAtPercentile(99),
+                    interval.getValueAtPercentile(99.9),
+                    interval.getValueAtPercentile(99.99),
+                    interval.getMaxValue());
         }
     }
 }

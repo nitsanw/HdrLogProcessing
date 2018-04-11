@@ -113,3 +113,24 @@ Will result in the creation of a log file per tag, with the default tag going to
 If you need only certain tags A,B:
 
     $ hodor SplitHistogramLogs -if taggyLog.hdr -it A -it B
+
+## HDR to CSV tool
+
+Using the above alias, run:
+
+    $ hodor HdrToCsv -i INPUT_FILE
+
+It will result in a strict transformation of a log file to CSV.  Intervals will
+be preserved.  For each interval, important percentiles will be written in
+dedicated columns.  The resulting CSV is printed on stdout.
+
+Example usage:
+
+```
+$ hodor HdrToCsv -i input.hgrm | tee output.csv
+#Timestamp,Throughput,Min,Avg,p50,p90,p95,p99,p999,p9999,Max
+1523292112.000,2364,60608,143515,113599,221823,268543,442367,1638399,6348799,6348799
+1523292113.000,192,64672,130923,116287,188031,205823,260351,366591,366591,366591
+1523292114.000,384,67520,144460,118527,213759,264703,414463,1793023,1793023,1793023
+...
+```
