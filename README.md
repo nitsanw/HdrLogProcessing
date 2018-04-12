@@ -7,12 +7,12 @@ Utilities for HDR Histogram logs manipulation. This repo currently includes util
 
 For brevity in the following examples, lets assume you built the project and added the following alias:
 
-    alias hodor=java -cp HdrLogProcessing-1.0-SNAPSHOT-jar-with-dependencies.jar
+    alias hodor=java -jar HdrLogProcessing-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 ## Summary tool
 Using the above alias run:
 
-    $ hodor SummarizeHistogramLogs [...]
+    $ hodor summarize [...]
 
 SummarizeHistogramLogsRange supports the following options:
 
@@ -31,7 +31,7 @@ SummarizeHistogramLogsRange supports the following options:
 
 This is useful when for example you are face with a histogram log you have collected from your application over time and you wish to summarize the percentiles from the full run:
 
-     $ hodor SummarizeHistogramLogsRange -if my-awesome-app-latencies.hdr
+     $ hodor summarize -if my-awesome-app-latencies.hdr
      TotalCount=27663673
      Period(ms)=205823
      Throughput(ops/sec)=134405.16
@@ -47,15 +47,15 @@ This is useful when for example you are face with a histogram log you have colle
 
 Now perhaps the first 200 seconds of this run are an unstable warmup period I wish to exclude from my summary:
 
-    $ hodor SummarizeHistogramLogs -if my-awesome-app-latencies.hdr -s 200
+    $ hodor summarize -if my-awesome-app-latencies.hdr -s 200
 
 Or maybe I got several logs, from several runs and I want an overall summary, excluding the first 60 seconds of the run and saving the output into a file:
 
-    $ hodor SummarizeHistogramLogs -if run1.hdr -if run2.hdr -if run3.hdr -s 60 -of runs-summary.out
+    $ hodor summarize -if run1.hdr -if run2.hdr -if run3.hdr -s 60 -of runs-summary.out
 
     -OR you could use a regexp to get all the files-
 
-    $ hodor SummarizeHistogramLogs -if ^run.*.hdr -s 60 -of runs-summary.out
+    $ hodor summarize -if ^run.*.hdr -s 60 -of runs-summary.out
 
 The default output is percentiles as shown above. We support HGRM output if you wish to plot the result with the useful plotter in HdrHistogram, and a CSV format to enable statistical analysis with other tools. The HGRM output with an output file will result in a file per tagged summary with the convention of: _outputfile.tag.hgrm_
 
@@ -64,7 +64,7 @@ The summary tool supports tags, and if your logs contains histograms of differen
 ## Union tool
 Using the above alias run:
 
-    $ hodor UnionHistogramLogs [...]
+    $ hodor union [...]
 
 UnionHistogramLogs supports the following options:
 
@@ -82,18 +82,18 @@ UnionHistogramLogs supports the following options:
 
 Sometimes you got lots of files, and you really wish you could just throw them all into one file. For example, lets say you used 3 separate load-generating clients to measure your server latencies. You can union all the logs into a single log as follows:
 
-    $ hodor UnionHistogramLogs -if ^load-gen.*.hdr -of union-load-gens.hdr
+    $ hodor union -if ^load-gen.*.hdr -of union-load-gens.hdr
 
 The above union will use absolute time so the result will be as if all load generators were logged from a single source (assuming the clocks are reasonablely in sync). You may want to collect multiple runs timelines into a single union. This is possible using the '-r' option.
 
 If each load generator represents a different operation you could use tags to differentiate them in the union:
 
-    $ hodor UnionHistogramLogs -tif READ=load-gen1.hdr -tif READ=load-gen2.hdr -tif WRITE=load-gen3.hdr -of union-load-gens.hdr
+    $ hodor union -tif READ=load-gen1.hdr -tif READ=load-gen2.hdr -tif WRITE=load-gen3.hdr -of union-load-gens.hdr
 
 ## Split tool
 Using the above alias run:
 
-    $ hodor SplitHistogramLogs [...]
+    $ hodor union [...]
 
 SplitHistogramLogs supports the following options:
 
@@ -107,18 +107,18 @@ SplitHistogramLogs supports the following options:
 
 Some tools do not support tags yet, so you may want to split a log into several logs for post processing.
 
-    $ hodor SplitHistogramLogs -if taggyLog.hdr
+    $ hodor split -if taggyLog.hdr
 
 Will result in the creation of a log file per tag, with the default tag going to the 'default' file. So tags A,B,C will end up in the files A.taggyLog.hdr, B.taggyLog.hdr, C.taggyLog.hdr respectively.
 If you need only certain tags A,B:
 
-    $ hodor SplitHistogramLogs -if taggyLog.hdr -it A -it B
+    $ hodor split -if taggyLog.hdr -it A -it B
 
 ## HDR to CSV tool
 
 Using the above alias, run:
 
-    $ hodor HdrToCsv -i INPUT_FILE
+    $ hodor to-csv -i INPUT_FILE
 
 It will result in a strict transformation of a log file to CSV.  Intervals will
 be preserved.  For each interval, important percentiles will be written in
@@ -127,7 +127,7 @@ dedicated columns.  The resulting CSV is printed on stdout.
 Example usage:
 
 ```
-$ hodor HdrToCsv -i input.hgrm | tee output.csv
+$ hodor to-csv -i input.hgrm | tee output.csv
 #Timestamp,Throughput,Min,Avg,p50,p90,p95,p99,p999,p9999,Max
 1523292112.000,2364,60608,143515,113599,221823,268543,442367,1638399,6348799,6348799
 1523292113.000,192,64672,130923,116287,188031,205823,260351,366591,366591,366591
