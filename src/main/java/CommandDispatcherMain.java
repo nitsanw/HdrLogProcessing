@@ -6,7 +6,7 @@ import java.util.stream.Stream;
  * first CLI parameter entered by the user and tries to match it against known
  * {@link Command}s.  If a match is found, then the {@code main(String[] args}
  * method of the class responsible for said command is invoked.
- *
+ * <p>
  * This class is mostly a shortcut so that the user does not need to remember
  * the class name to be invoked (like {@code UnionHistogramLogs}).
  */
@@ -41,9 +41,9 @@ public class CommandDispatcherMain
             // arguments can be passed to the underlying class.
             String[] withoutCommand = Arrays.copyOfRange(args, 1, args.length);
             Command.fromUserInput(args[0])
-                    .mainClass
-                    .getMethod("main", String[].class)
-                    .invoke(null, (Object) withoutCommand);
+                .mainClass
+                .getMethod("main", String[].class)
+                .invoke(null, (Object) withoutCommand);
         }
     }
 
@@ -64,26 +64,26 @@ public class CommandDispatcherMain
         private static boolean isValid(String command)
         {
             return Stream.of(values())
-                    .anyMatch(c -> c.niceName().equals(command));
+                .anyMatch(c -> c.niceName().equals(command));
         }
 
         private static Command fromUserInput(String command)
         {
             return Stream.of(values())
-                    .filter(c -> c.niceName().equals(command))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Invalid command '" + command + "'"));
-        }
-
-        private String niceName()
-        {
-            return sanitize(name());
+                .filter(c -> c.niceName().equals(command))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Invalid command '" + command + "'"));
         }
 
         private static String sanitize(String s)
         {
             return s.replace("_", "-").toLowerCase();
+        }
+
+        private String niceName()
+        {
+            return sanitize(name());
         }
     }
 }
