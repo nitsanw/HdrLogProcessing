@@ -47,13 +47,14 @@ public class HdrToCsv
     {
         HistogramLogReader reader = new HistogramLogReader(inputFile);
         System.out.println(
-            "#Timestamp,Throughput,Min,Avg,p50,p90,p95,p99,p999,p9999,Max");
+            "#Absolute timestamp,Relative timestamp,Throughput,Min,Avg,p50,p90,p95,p99,p999,p9999,Max");
         while (reader.hasNext())
         {
             Histogram interval = (Histogram) reader.nextIntervalHistogram();
             System.out.printf(Locale.US,
-                "%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d%n",
+                "%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d%n",
                 interval.getStartTimeStamp() / 1000.0,
+                interval.getStartTimeStamp() / 1000 - (long) reader.getStartTimeSec(),
                 interval.getTotalCount(), interval.getMinValue(),
                 (long) interval.getMean(),
                 interval.getValueAtPercentile(50),
