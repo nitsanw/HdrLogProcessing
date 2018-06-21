@@ -1,19 +1,21 @@
 import org.HdrHistogram.Histogram;
-import org.HdrHistogram.HistogramLogReader;
 import org.HdrHistogram.HistogramLogWriter;
-import org.kohsuke.args4j.CmdLineException;
-import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
+import psy.lob.saw.HistogramIterator;
+import psy.lob.saw.HistogramSink;
+import psy.lob.saw.OrderedHistogramLogReader;
+import psy.lob.saw.UnionHistograms;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-public class UnionHistogramLogs
+import static psy.lob.saw.HdrHistogramUtil.createLogWriter;
+
+public class UnionHistogramLogs implements Runnable
 {
 
     @Option(name = "-start", aliases = "-s", usage = "relative log start time in seconds, (default: 0.0)", required = false)
@@ -32,20 +34,9 @@ public class UnionHistogramLogs
     private Map<File, String> inputFilesTags = new HashMap<>();
     private File outputFile;
 
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args)
     {
-        UnionHistogramLogs app = new UnionHistogramLogs();
-        CmdLineParser parser = new CmdLineParser(app);
-        try
-        {
-            parser.parseArgument(args);
-            app.execute();
-        }
-        catch (CmdLineException e)
-        {
-            System.out.println(e.getMessage());
-            parser.printUsage(System.out);
-        }
+        ParseAndRunUtil.parseParamsAndRun(args, new UnionHistogramLogs());
     }
 
     @Option(name = "-inputPath", aliases = "-ip", usage = "set path to use for input files, defaults to current folder", required = false)
@@ -104,7 +95,8 @@ public class UnionHistogramLogs
         outputFile = new File(outputFileName);
     }
 
-    private void execute() throws FileNotFoundException
+    @Override
+    public void run()
     {
         if (verbose)
         {
@@ -123,7 +115,7 @@ public class UnionHistogramLogs
             }
             else
             {
-                System.out.println("No input files :(");
+                System.out.println("No input files!");
             }
 
             for (File inputFile : inputFiles)
@@ -136,197 +128,56 @@ public class UnionHistogramLogs
             return;
         }
 
-        PrintStream report = System.out;
 
-        if (outputFile != null)
+        try
         {
-            report = new PrintStream(new FileOutputStream(outputFile));
-        }
-        union(report);
-    }
-
-    private void union(PrintStream out) throws FileNotFoundException
-    {
-        List<HistogramIterator> ins = new ArrayList<>();
-        for (File inputFile : inputFiles)
-        {
-            ins.add(new HistogramIterator(new HistogramLogReader(inputFile), inputFilesTags.get(inputFile)));
-        }
-
-        ins.removeIf(e -> !e.hasNext());
-        Collections.sort(ins);
-
-        if (ins.isEmpty())
-        {
-            if (verbose)
+            final PrintStream report;
+            if (outputFile != null)
             {
-                System.out.println("Input files do not contain range");
-            }
-            return;
-        }
-
-        // Init writer
-        HistogramLogWriter writer = new HistogramLogWriter(out);
-        writer.outputLogFormatVersion();
-        writer.outputComment("Union of:" + inputFiles + " start:" + start + " end:" + end + " relative:" + relative);
-        if (!relative)
-        {
-            long startTimeStamp = (long) (ins.get(0).reader.getStartTimeSec() * 1000);
-            writer.setBaseTime(startTimeStamp);
-            writer.outputBaseTime(startTimeStamp);
-            writer.outputStartTime(startTimeStamp);
-        }
-        writer.outputLegend();
-
-        Map<String, Histogram> unionedByTag = new HashMap<>();
-        // iterators are now sorted by start time
-        while (!ins.isEmpty())
-        {
-            HistogramIterator input = ins.get(0);
-            Histogram next = input.next();
-            Histogram union = unionedByTag.computeIfAbsent(next.getTag(), k ->
-            {
-                Histogram h = new Histogram(next.getNumberOfSignificantValueDigits());
-                h.setTag(k);
-                return h;
-            });
-
-            long nextStart = next.getStartTimeStamp();
-            long nextEnd = next.getEndTimeStamp();
-            long unionStart = union.getStartTimeStamp();
-            long unionEnd = union.getEndTimeStamp();
-            // iterators are sorted, so we know nextStart >= unionStart
-            boolean rollover = false;
-
-            if (unionStart == Long.MAX_VALUE)
-            {
-                union.add(next);
-            }
-            else if (nextStart < unionEnd && nextEnd <= unionEnd)
-            {
-                union.add(next);
-            }
-            else if (nextStart < unionEnd)
-            {
-                double nLength = nextEnd - nextStart;
-                double overlap = (unionEnd - nextStart) / nLength;
-                if (overlap > 0.8)
-                {
-                    union.add(next);
-                    // prevent an ever expanding union
-                    union.setStartTimeStamp(unionStart);
-                    union.setEndTimeStamp(unionEnd);
-                }
-                else
-                {
-                    rollover = true;
-                }
+                report = new PrintStream(new FileOutputStream(outputFile));
             }
             else
             {
-                rollover = true;
+                report = System.out;
             }
-            if (rollover)
+            List<HistogramIterator> ins = new ArrayList<>();
+            for (File inputFile : inputFiles)
             {
-                writer.outputIntervalHistogram(union);
-                union.reset();
-                union.setEndTimeStamp(0L);
-                union.setStartTimeStamp(Long.MAX_VALUE);
-                union.setTag(next.getTag());
-                union.add(next);
+                ins.add(new HistogramIterator(
+                    new OrderedHistogramLogReader(inputFile, start, end),
+                    inputFilesTags.get(inputFile),
+                    relative));
             }
-            // trim and sort
-            ins.removeIf(e -> !e.hasNext());
-            Collections.sort(ins);
+            UnionHistograms unionHistograms = new UnionHistograms(verbose, System.out, ins, new HistogramSink()
+            {
+                HistogramLogWriter writer;
+
+                @Override
+                public void startTime(double st)
+                {
+                    String comment = "Union of:" +
+                        inputFiles +
+                        " start:" +
+                        start +
+                        " end:" +
+                        end +
+                        " relative:" +
+                        relative;
+                    writer = createLogWriter(report, comment, relative ? 0.0 : st);
+                }
+
+                @Override
+                public void accept(Histogram h)
+                {
+                    writer.outputIntervalHistogram(h);
+                }
+            });
+            unionHistograms.run();
         }
-        // write last hgrms
-        for (Histogram u : unionedByTag.values())
+        catch (Exception e)
         {
-            writer.outputIntervalHistogram(u);
+            throw new RuntimeException(e);
         }
     }
 
-    class HistogramIterator implements Comparable<HistogramIterator>
-    {
-        HistogramLogReader reader;
-        Histogram next;
-        String tag;
-
-        public HistogramIterator(HistogramLogReader reader)
-        {
-            this.reader = reader;
-            read();
-        }
-
-        public HistogramIterator(HistogramLogReader reader, String tag)
-        {
-            this.reader = reader;
-            this.tag = tag;
-            read();
-        }
-
-        private void read()
-        {
-            do
-            {
-                next = (Histogram) reader.nextIntervalHistogram(start, end);
-            }
-            while (next == null && reader.hasNext());
-            if (next == null)
-            {
-                return;
-            }
-
-            // replace start time with a relative one
-            if (relative)
-            {
-                long length = next.getEndTimeStamp() - next.getStartTimeStamp();
-                long nextStartTime = (long) (next.getStartTimeStamp() - reader.getStartTimeSec() * 1000);
-                next.setStartTimeStamp(nextStartTime);
-                next.setEndTimeStamp(next.getStartTimeStamp() + length);
-            }
-            if (tag != null)
-            {
-                String nextTag = next.getTag();
-                if (nextTag == null)
-                {
-                    next.setTag(tag);
-                }
-                else
-                {
-                    next.setTag(tag + "::" + nextTag);
-                }
-            }
-        }
-
-        Histogram next()
-        {
-            Histogram c = next;
-            read();
-            return c;
-        }
-
-        boolean hasNext()
-        {
-            return next != null;
-        }
-
-        @Override
-        public int compareTo(HistogramIterator o)
-        {
-            if (!hasNext() && !o.hasNext())
-            {
-                return 0;
-            }
-            if (!hasNext())
-            {
-                return -1;
-            }
-            if (!o.hasNext())
-            {
-                return 1;
-            }
-            return (int) (next.getStartTimeStamp() - o.next.getStartTimeStamp());
-        }
-    }
 }

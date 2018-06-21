@@ -1,31 +1,19 @@
 import org.HdrHistogram.Histogram;
-import org.HdrHistogram.HistogramLogReader;
-import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
+import psy.lob.saw.OrderedHistogramLogReader;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.nio.file.Paths;
 import java.util.Locale;
 
-public class HdrToCsv
+public class HdrToCsv implements Runnable
 {
     private File inputFile;
 
     public static void main(String[] args)
     {
-        HdrToCsv app = new HdrToCsv();
-        CmdLineParser parser = new CmdLineParser(app);
-        try
-        {
-            parser.parseArgument(args);
-            app.execute();
-        }
-        catch (Exception e)
-        {
-            System.out.println(e.getMessage());
-            parser.printUsage(System.out);
-        }
+        ParseAndRunUtil.parseParamsAndRun(args, new HdrToCsv());
     }
 
     @Option(name = "--input-file",
@@ -43,9 +31,19 @@ public class HdrToCsv
         inputFile = in;
     }
 
-    private void execute() throws FileNotFoundException
+    @Override
+    public void run()
     {
-        HistogramLogReader reader = new HistogramLogReader(inputFile);
+        OrderedHistogramLogReader reader = null;
+        try
+        {
+            reader = new OrderedHistogramLogReader(inputFile);
+        }
+        catch (FileNotFoundException e)
+        {
+            throw new RuntimeException(e);
+        }
+
         System.out.println(
             "#Absolute timestamp,Relative timestamp,Throughput,Min,Avg,p50,p90,p95,p99,p999,p9999,Max");
         while (reader.hasNext())

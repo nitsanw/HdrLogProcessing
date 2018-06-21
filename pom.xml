@@ -51,6 +51,8 @@
 					</execution>
 				</executions>
 				<configuration>
+					<finalName>processor</finalName>
+					<appendAssemblyId>false</appendAssemblyId>
 					<descriptorRefs>
 						<descriptorRef>jar-with-dependencies</descriptorRef>
 					</descriptorRefs>

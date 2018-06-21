@@ -7,7 +7,7 @@ Utilities for HDR Histogram logs manipulation. This repo currently includes util
 
 For brevity in the following examples, lets assume you built the project and added the following alias:
 
-    alias hodor=java -jar HdrLogProcessing-1.0-SNAPSHOT-jar-with-dependencies.jar
+    alias hodor=java -jar processor.jar
 
 ## Summary tool
 Using the above alias run:
@@ -97,13 +97,13 @@ Using the above alias run:
 
 SplitHistogramLogs supports the following options:
 
-    -end (-e) N          : relative log end time in  seconds,    (default: MAX_DOUBLE)
+    -end (-e) N           : relative log end time in  seconds,    (default: MAX_DOUBLE)
     -excludeTag (-et) VAL : add a tag to exclude from input, 'default' is a special tag for the null tag.
     -includeTag (-it) VAL : when include tags are used only the explicitly included will be split out, 'default' is a special tag for the null tag.
-    -inputFile (-if) VAL : set the input hdr log from input     path
-    -inputPath (-ip) VAL : set path to use for input files, defaults to current folder
-    -start (-s) N        : relative log start time in  seconds,    (default: 0.0)
-    -verbose (-v)        : verbose logging, (default:  false)
+    -inputFile (-if) VAL  : set the input hdr log from input     path
+    -inputPath (-ip) VAL  : set path to use for input files, defaults to current folder
+    -start (-s) N         : relative log start time in  seconds,    (default: 0.0)
+    -verbose (-v)         : verbose logging, (default:  false)
 
 Some tools do not support tags yet, so you may want to split a log into several logs for post processing.
 

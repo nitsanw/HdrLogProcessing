@@ -1,7 +1,6 @@
 import org.HdrHistogram.Histogram;
-import org.HdrHistogram.HistogramLogReader;
-import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
+import psy.lob.saw.OrderedHistogramLogReader;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -11,7 +10,9 @@ import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-public class SummarizeHistogramLogs
+import static psy.lob.saw.HdrHistogramUtil.logHistogramForVerbose;
+
+public class SummarizeHistogramLogs implements Runnable
 {
 
     @Option(name = "-ignoreTag", aliases = "-it", usage = "summary should not be split by tag, (default: false)", required = false)
@@ -37,20 +38,9 @@ public class SummarizeHistogramLogs
     private File inputPath = new File(".");
     private Set<File> inputFiles = new HashSet<>();
 
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args)
     {
-        SummarizeHistogramLogs app = new SummarizeHistogramLogs();
-        CmdLineParser parser = new CmdLineParser(app);
-        try
-        {
-            parser.parseArgument(args);
-            app.execute();
-        }
-        catch (Exception e)
-        {
-            System.out.println(e.getMessage());
-            parser.printUsage(System.out);
-        }
+        ParseAndRunUtil.parseParamsAndRun(args, new SummarizeHistogramLogs());
     }
 
     @Option(name = "-inputPath", aliases = "-ip", usage = "set path to use for input files, defaults to current folder", required = false)
@@ -92,17 +82,17 @@ public class SummarizeHistogramLogs
         inputFiles.add(in);
     }
 
-    private void execute() throws FileNotFoundException
+    public void run()
     {
         if (verbose)
         {
             if (end != Double.MAX_VALUE)
             {
-                System.out.printf("start:%.2f end:%.2f path:%s\n", start, end, inputPath.getAbsolutePath());
+                System.out.printf("start:%.2f end:%.2f path:%s%n", start, end, inputPath.getAbsolutePath());
             }
             else
             {
-                System.out.printf("start:%.2f end: MAX path:%s\n", start, inputPath.getAbsolutePath());
+                System.out.printf("start:%.2f end: MAX path:%s%n", start, inputPath.getAbsolutePath());
             }
         }
         if (inputFiles.isEmpty())
@@ -110,7 +100,14 @@ public class SummarizeHistogramLogs
             return;
         }
 
-        summarizeAndPrint();
+        try
+        {
+            summarizeAndPrint();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     private void summarizeAndPrint() throws FileNotFoundException
@@ -125,7 +122,7 @@ public class SummarizeHistogramLogs
             {
                 System.out.println("Summarizing file: " + inputFile.getName());
             }
-            HistogramLogReader reader = new HistogramLogReader(inputFile);
+            OrderedHistogramLogReader reader = new OrderedHistogramLogReader(inputFile, start, end);
             Histogram interval;
             int i = 0;
             boolean first = true;
@@ -133,7 +130,7 @@ public class SummarizeHistogramLogs
 
             while (reader.hasNext())
             {
-                interval = (Histogram) reader.nextIntervalHistogram(start, end);
+                interval = (Histogram) reader.nextIntervalHistogram();
                 if (interval == null)
                 {
                     continue;
@@ -152,8 +149,7 @@ public class SummarizeHistogramLogs
                 final int numberOfSignificantValueDigits = interval.getNumberOfSignificantValueDigits();
                 Histogram sum = sumByTag.computeIfAbsent(ntag, k ->
                 {
-                    Histogram h = new Histogram(
-                        numberOfSignificantValueDigits);
+                    Histogram h = new Histogram(numberOfSignificantValueDigits);
                     h.setTag(k);
                     return h;
                 });
@@ -162,19 +158,7 @@ public class SummarizeHistogramLogs
                 sum.add(interval);
                 if (verbose)
                 {
-                    String tag = (sum.getTag() == null) ? "" : "(" + sum.getTag() + ") ";
-                    System.out.printf(
-                        "%s%d: [time=%.3f,count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d]\n",
-                        tag,
-                        i++,
-                        (interval.getStartTimeStamp() - startTime) / 1000.0,
-                        interval.getTotalCount(),
-                        (long) (interval.getMinValue() / outputValueUnitRatio),
-                        (long) (interval.getMaxValue() / outputValueUnitRatio),
-                        interval.getMean() / outputValueUnitRatio,
-                        (long) (interval.getValueAtPercentile(50) / outputValueUnitRatio),
-                        (long) (interval.getValueAtPercentile(99) / outputValueUnitRatio),
-                        (long) (interval.getValueAtPercentile(99.9) / outputValueUnitRatio));
+                    logHistogramForVerbose(System.out, interval, i++, outputValueUnitRatio);
                 }
             }
             // calculate period
@@ -184,15 +168,9 @@ public class SummarizeHistogramLogs
                 long sumPeriod = (sum.getEndTimeStamp() - sum.getStartTimeStamp());
                 if (verbose)
                 {
-                    String tag = (sum.getTag() == null) ? "" : "::" + sum.getTag();
-                    System.out.printf("%s%s %d secs [count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d]\n",
-                        inputFile.getName(), tag,
-                        sumPeriod / 1000, sum.getTotalCount(),
-                        (long) (sum.getMinValue() / outputValueUnitRatio),
-                        (long) (sum.getMaxValue() / outputValueUnitRatio), sum.getMean() / outputValueUnitRatio,
-                        (long) (sum.getValueAtPercentile(50) / outputValueUnitRatio),
-                        (long) (sum.getValueAtPercentile(99) / outputValueUnitRatio),
-                        (long) (sum.getValueAtPercentile(99.9) / outputValueUnitRatio));
+                    System.out.print(inputFile.getName());
+                    System.out.print(", ");
+                    logHistogramForVerbose(System.out, sum, i++, outputValueUnitRatio);
                 }
                 sum.setEndTimeStamp(0);
                 sum.setStartTimeStamp(Long.MAX_VALUE);
@@ -244,18 +222,18 @@ public class SummarizeHistogramLogs
     {
         double avgThpt = (sum.getTotalCount() * 1000.0) / period;
         String tag = (sum.getTag() == null) ? "" : sum.getTag() + ".";
-        out.printf("%sTotalCount=%d\n", tag, sum.getTotalCount());
-        out.printf("%sPeriod(ms)=%d\n", tag, period);
-        out.printf("%sThroughput(ops/sec)=%.2f\n", tag, avgThpt);
-        out.printf("%sMin=%d\n", tag, (long) (sum.getMinValue() / outputValueUnitRatio));
-        out.printf("%sMean=%.2f\n", tag, sum.getMean() / outputValueUnitRatio);
-        out.printf("%s50.000ptile=%d\n", tag, (long) (sum.getValueAtPercentile(50) / outputValueUnitRatio));
-        out.printf("%s90.000ptile=%d\n", tag, (long) (sum.getValueAtPercentile(90) / outputValueUnitRatio));
-        out.printf("%s99.000ptile=%d\n", tag, (long) (sum.getValueAtPercentile(99) / outputValueUnitRatio));
-        out.printf("%s99.900ptile=%d\n", tag, (long) (sum.getValueAtPercentile(99.9) / outputValueUnitRatio));
-        out.printf("%s99.990ptile=%d\n", tag, (long) (sum.getValueAtPercentile(99.99) / outputValueUnitRatio));
-        out.printf("%s99.999ptile=%d\n", tag, (long) (sum.getValueAtPercentile(99.999) / outputValueUnitRatio));
-        out.printf("%sMax=%d\n", tag, (long) (sum.getMaxValue() / outputValueUnitRatio));
+        out.printf("%sTotalCount=%d%n", tag, sum.getTotalCount());
+        out.printf("%sPeriod(ms)=%d%n", tag, period);
+        out.printf("%sThroughput(ops/sec)=%.2f%n", tag, avgThpt);
+        out.printf("%sMin=%d%n", tag, (long) (sum.getMinValue() / outputValueUnitRatio));
+        out.printf("%sMean=%.2f%n", tag, sum.getMean() / outputValueUnitRatio);
+        out.printf("%s50.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(50) / outputValueUnitRatio));
+        out.printf("%s90.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(90) / outputValueUnitRatio));
+        out.printf("%s99.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(99) / outputValueUnitRatio));
+        out.printf("%s99.900ptile=%d%n", tag, (long) (sum.getValueAtPercentile(99.9) / outputValueUnitRatio));
+        out.printf("%s99.990ptile=%d%n", tag, (long) (sum.getValueAtPercentile(99.99) / outputValueUnitRatio));
+        out.printf("%s99.999ptile=%d%n", tag, (long) (sum.getValueAtPercentile(99.999) / outputValueUnitRatio));
+        out.printf("%sMax=%d%n", tag, (long) (sum.getMaxValue() / outputValueUnitRatio));
     }
 
     private void printCsv(PrintStream out, Histogram sum)
