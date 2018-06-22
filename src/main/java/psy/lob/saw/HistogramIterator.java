@@ -12,7 +12,6 @@ public class HistogramIterator implements Comparable<HistogramIterator>
     public HistogramIterator(OrderedHistogramLogReader reader, boolean relative)
     {
         this(reader, null, relative);
-        read();
     }
 
     public HistogramIterator(OrderedHistogramLogReader reader, String tag, boolean relative)
