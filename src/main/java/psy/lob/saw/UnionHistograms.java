@@ -15,6 +15,7 @@ public class UnionHistograms implements Runnable
     private final PrintStream verboseOut;
     private final List<HistogramIterator> inputs;
     private final HistogramSink output;
+    private final long targetUnionMs;
 
     public UnionHistograms(
         boolean verbose,
@@ -22,10 +23,20 @@ public class UnionHistograms implements Runnable
         List<HistogramIterator> inputs,
         HistogramSink output)
     {
+        this(verbose,verboseOut, inputs, output, 0);
+    }
+    public UnionHistograms(
+        boolean verbose,
+        PrintStream verboseOut,
+        List<HistogramIterator> inputs,
+        HistogramSink output,
+        long targetUnionMs)
+    {
         this.verbose = verbose;
         this.verboseOut = verboseOut;
         this.inputs = inputs;
         this.output = output;
+        this.targetUnionMs = targetUnionMs;
     }
 
     @Override
@@ -57,6 +68,8 @@ public class UnionHistograms implements Runnable
             Histogram union = unionedByTag.computeIfAbsent(next.getTag(), k ->
             {
                 Histogram h = new Histogram(next.getNumberOfSignificantValueDigits());
+                h.setEndTimeStamp(0L);
+                h.setStartTimeStamp(Long.MAX_VALUE);
                 h.setTag(k);
                 return h;
             });
@@ -68,18 +81,27 @@ public class UnionHistograms implements Runnable
             // iterators are sorted, so we know nextStart >= unionStart
             boolean rollover = false;
 
+            // new union
             if (unionStart == Long.MAX_VALUE)
             {
                 i = addNext(i, next, union);
+                // expand union length to allow more intervals to fall into the same union
+                if (union.getEndTimeStamp() - union.getStartTimeStamp() < targetUnionMs)
+                {
+                    union.setEndTimeStamp(union.getStartTimeStamp()  + targetUnionMs);
+                }
             }
+            // next interval is inside union interval
             else if (nextStart < unionEnd && nextEnd <= unionEnd)
             {
                 i = addNext(i, next, union);
             }
+            // next interval starts before the end of this interval, but is not contained by it
             else if (nextStart < unionEnd)
             {
-                double nLength = nextEnd - nextStart;
-                double overlap = (unionEnd - nextStart) / nLength;
+                double nextIntervalLength = nextEnd - nextStart;
+                double overlap = (unionEnd - nextStart) / nextIntervalLength;
+                // 80% or more of next is in fact in the current union 
                 if (overlap > 0.8)
                 {
                     i = addNext(i, next, union);
@@ -104,6 +126,11 @@ public class UnionHistograms implements Runnable
                 union.setStartTimeStamp(Long.MAX_VALUE);
                 union.setTag(next.getTag());
                 i = addNext(i, next, union);
+                // expand union length to allow more intervals to fall into the same union
+                if (union.getEndTimeStamp() - union.getStartTimeStamp() < targetUnionMs)
+                {
+                    union.setEndTimeStamp(union.getStartTimeStamp()  + targetUnionMs);
+                }
             }
             // trim and sort
             ins.removeIf(e -> !e.hasNext());

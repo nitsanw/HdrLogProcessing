@@ -29,6 +29,10 @@ public class UnionHistogramLogs implements Runnable
 
     @Option(name = "-relative", aliases = "-r", usage = "relative timeline merge, (default: false)", required = false)
     public boolean relative = false;
+
+    @Option(name = "-targetUnionSec", aliases = "-tus", usage = "target union interval length in seconds, (default: 0.0, which will use existing interval lengths)", required = false)
+    public double targetUnionSec = 0.0;
+
     private File inputPath = new File(".");
     private Set<File> inputFiles = new HashSet<>();
     private Map<File, String> inputFilesTags = new HashMap<>();
@@ -63,14 +67,19 @@ public class UnionHistogramLogs implements Runnable
         })));
     }
 
-    @Option(name = "-inputFileAbsolute", aliases = "-ifa", usage = "add an input hdr log file by absolute path, also takes regexp", required = false)
-    public void addInputFileAbsolute(String inputFile)
+    @Option(name = "-inputFilePath", aliases = "-ifp", usage = "add an input file by path relative to working dir or absolute", required = false)
+    public void addInputFilePath(String inputFileName)
     {
-        inputFiles.add(new File(inputFile));
+        File in = new File(inputFileName);
+        if (!in.exists())
+        {
+            throw new IllegalArgumentException("file:" + inputFileName + " must exist!");
+        }
+        inputFiles.add(in);
     }
 
     @Option(name = "-taggedInputFile", aliases = "-tif", usage = "a <tag>=<filename> add an input file, tag all histograms from this file with tag. If histograms have a tag it will be conactanated to file tag.", required = false)
-    public void addInputFileAbs(String inputFileNameAndTag)
+    public void addTaggedInputFile(String inputFileNameAndTag)
     {
         String[] args = inputFileNameAndTag.split("=");
         if (args.length != 2)
@@ -171,7 +180,7 @@ public class UnionHistogramLogs implements Runnable
                 {
                     writer.outputIntervalHistogram(h);
                 }
-            });
+            }, (long)(targetUnionSec * 1000));
             unionHistograms.run();
         }
         catch (Exception e)

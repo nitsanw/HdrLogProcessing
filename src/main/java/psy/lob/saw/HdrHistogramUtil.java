@@ -21,17 +21,20 @@ public class HdrHistogramUtil
         int i,
         double outputValueUnitRatio)
     {
-        String ntag = interval.getTag();
-        String tag = (ntag == null) ? "(default)" : "(" + ntag + ")";
-        verboseOut.printf("%s %5d: %8.3f [count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d]%n",
-            tag, i, interval.getStartTimeStamp() / 1000.0,
+        String tag = (interval.getTag() == null) ? "default" : interval.getTag();
+        double intervalLengthSec = (interval.getEndTimeStamp() - interval.getStartTimeStamp())/1000.0;
+        verboseOut.printf("%s %5d: (%8.3f to %8.3f) [count=%d,min=%d,max=%d,avg=%.2f,50=%d,99=%d,999=%d,ops/s=%.1f]%n",
+            tag, i,
+            interval.getStartTimeStamp() / 1000.0,
+            interval.getEndTimeStamp() / 1000.0,
             interval.getTotalCount(),
             (long) (interval.getMinValue() / outputValueUnitRatio),
             (long) (interval.getMaxValue() / outputValueUnitRatio),
             interval.getMean() / outputValueUnitRatio,
             (long) (interval.getValueAtPercentile(50) / outputValueUnitRatio),
             (long) (interval.getValueAtPercentile(99) / outputValueUnitRatio),
-            (long) (interval.getValueAtPercentile(99.9) / outputValueUnitRatio));
+            (long) (interval.getValueAtPercentile(99.9) / outputValueUnitRatio),
+            interval.getTotalCount() / intervalLengthSec);
     }
 
     public static HistogramLogWriter createLogWriter(File output, String comment, double startTimeSec)
