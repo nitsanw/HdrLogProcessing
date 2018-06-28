@@ -1,3 +1,9 @@
+/**
+ * Written by Gil Tene of Azul Systems, and released to the public domain,
+ * as explained at http://creativecommons.org/publicdomain/zero/1.0/
+ *
+ * @author Gil Tene
+ */
 package psy.lob.saw;
 
 import org.HdrHistogram.DoubleHistogram;
@@ -14,6 +20,47 @@ import java.util.Locale;
 import java.util.Scanner;
 import java.util.zip.DataFormatException;
 
+/**
+ * A histogram log reader.
+ * <p>
+ * Histogram logs are used to capture full fidelity, per-time-interval
+ * histograms of a recorded value.
+ * <p>
+ * For example, a histogram log can be used to capture high fidelity
+ * reaction-time logs for some measured system or subsystem component.
+ * Such a log would capture a full reaction time histogram for each
+ * logged interval, and could be used to later reconstruct a full
+ * HdrHistogram of the measured reaction time behavior for any arbitrary
+ * time range within the log, by adding [only] the relevant interval
+ * histograms.
+ * <h3>Histogram log format:</h3>
+ * A histogram log file consists of text lines. Lines beginning with
+ * the "#" character are optional and treated as comments. Lines
+ * containing the legend (starting with "Timestamp") are also optional
+ * and ignored in parsing the histogram log. All other lines must
+ * be valid interval description lines. Text fields are delimited by
+ * commas, spaces.
+ * <p>
+ * A valid interval description line contains an optional Tag=tagString
+ * text field, followed by an interval description.
+ * <p>
+ * A valid interval description must contain exactly four text fields:
+ * <ul>
+ * <li>StartTimestamp: The first field must contain a number parse-able as a Double value,
+ * representing the start timestamp of the interval in seconds.</li>
+ * <li>intervalLength: The second field must contain a number parse-able as a Double value,
+ * representing the length of the interval in seconds.</li>
+ * <li>Interval_Max: The third field must contain a number parse-able as a Double value,
+ * which generally represents the maximum value of the interval histogram.</li>
+ * <li>Interval_Compressed_Histogram: The fourth field must contain a text field
+ * parse-able as a Base64 text representation of a compressed HdrHistogram.</li>
+ * </ul>
+ * The log file may contain an optional indication of a starting time. Starting time
+ * is indicated using a special comments starting with "#[StartTime: " and followed
+ * by a number parse-able as a double, representing the start time (in seconds)
+ * that may be added to timestamps in the file to determine an absolute
+ * timestamp (e.g. since the epoch) for each interval.
+ */
 public class HistogramLogScanner implements Closeable
 {
 
@@ -28,10 +75,22 @@ public class HistogramLogScanner implements Closeable
      */
     public interface EventHandler
     {
+        /**
+         * @param comment a non-standard comment observed in the log, e.g. "#Our's is a nice 'ouse, our's is, We've got no rats or mouses"
+         * @return false to keep processing, true to stop
+         */
         boolean onComment(String comment);
 
+        /**
+         * @param secondsSinceEpoch observed standard comment tag: "# BaseTime: "
+         * @return false to keep processing, true to stop
+         */
         boolean onBaseTime(double secondsSinceEpoch);
 
+        /**
+         * @param secondsSinceEpoch observed standard comment tag: "# StartTime: "
+         * @return false to keep processing, true to stop
+         */
         boolean onStartTime(double secondsSinceEpoch);
 
         /**
@@ -42,10 +101,14 @@ public class HistogramLogScanner implements Closeable
          * @param timestamp  logged timestamp
          * @param length     logged interval length
          * @param lazyReader to be called if the histogram needs to be deserialized, given the tag/timestamp etc.
-         * @return
+         * @return false to keep processing, true to stop
          */
         boolean onHistogram(String tag, double timestamp, double length, EncodableHistogramSupplier lazyReader);
 
+        /**
+         * @param t an exception observed while processing the log
+         * @return false to keep processing, true to stop
+         */
         boolean onException(Throwable t);
     }
 
@@ -113,8 +176,6 @@ public class HistogramLogScanner implements Closeable
     protected final Scanner scanner;
 
     /**
-     * Constructs a new OrderedHistogramLogReader that produces intervals read from the specified file name.
-     *
      * @param inputFileName The name of the file to read from
      * @throws FileNotFoundException when unable to find inputFileName
      */
@@ -124,10 +185,6 @@ public class HistogramLogScanner implements Closeable
     }
 
     /**
-     * Constructs a new OrderedHistogramLogReader that produces intervals read from the specified InputStream. Note that
-     * log readers constructed through this constructor do not assume ownership of stream and will not close it on
-     * {@link #close()}.
-     *
      * @param inputStream The InputStream to read from
      */
     public HistogramLogScanner(final InputStream inputStream)
@@ -136,8 +193,6 @@ public class HistogramLogScanner implements Closeable
     }
 
     /**
-     * Constructs a new OrderedHistogramLogReader that produces intervals read from the specified file.
-     *
      * @param inputFile The File to read from
      * @throws FileNotFoundException when unable to find inputFile
      */
@@ -160,7 +215,7 @@ public class HistogramLogScanner implements Closeable
     }
 
     /**
-     * Close underlying scanner.
+     * Close underlying scanner. Note that if initialized with InputStream then the stream is closed as a result.
      */
     @Override
     public void close()
@@ -168,6 +223,11 @@ public class HistogramLogScanner implements Closeable
         scanner.close();
     }
 
+    /**
+     * Reads the log, delivering events to the provided handler until the handler signals to stop or the end of the log.
+     * 
+     * @param handler to handle s**t
+     */
     public void process(EventHandler handler)
     {
         while (scanner.hasNextLine())
