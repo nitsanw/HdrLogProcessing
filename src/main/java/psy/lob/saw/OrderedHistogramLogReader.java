@@ -229,4 +229,9 @@ public class OrderedHistogramLogReader implements Closeable
     {
         scanner.close();
     }
+    
+    public String source()
+    {
+        return scanner.source();
+    }
 }

@@ -91,4 +91,9 @@ public class HistogramIterator implements Comparable<HistogramIterator>
     {
         return reader.getStartTimeSec();
     }
+    
+    public String source()
+    {
+        return reader.source();
+    }
 }

@@ -11,6 +11,16 @@ import java.util.Map;
 public class UnionHistograms implements Runnable
 {
 
+    private static class UnionHistogram
+    {
+        final Histogram h;
+        int index;
+
+        private UnionHistogram(int numberOfSignificantValueDigits)
+        {
+            this.h = new Histogram(numberOfSignificantValueDigits);
+        }
+    }
     private final boolean verbose;
     private final PrintStream verboseOut;
     private final List<HistogramIterator> inputs;
@@ -25,6 +35,7 @@ public class UnionHistograms implements Runnable
     {
         this(verbose,verboseOut, inputs, output, 0);
     }
+    
     public UnionHistograms(
         boolean verbose,
         PrintStream verboseOut,
@@ -57,44 +68,45 @@ public class UnionHistograms implements Runnable
 
         output.startTime(ins.get(0).getStartTimeSec());
 
-        Map<String, Histogram> unionedByTag = new HashMap<>();
-        // iterators are now sorted by start time
-        int i = 0;
+        Map<String, UnionHistogram> unionedByTag = new HashMap<>();
         while (!ins.isEmpty())
         {
             HistogramIterator input = ins.get(0);
             Histogram next = input.next();
 
-            Histogram union = unionedByTag.computeIfAbsent(next.getTag(), k ->
+            UnionHistogram union = unionedByTag.computeIfAbsent(next.getTag(), k ->
             {
-                Histogram h = new Histogram(next.getNumberOfSignificantValueDigits());
-                h.setEndTimeStamp(0L);
-                h.setStartTimeStamp(Long.MAX_VALUE);
-                h.setTag(k);
-                return h;
+                UnionHistogram u = new UnionHistogram(next.getNumberOfSignificantValueDigits());
+                u.h.setEndTimeStamp(0L);
+                u.h.setStartTimeStamp(Long.MAX_VALUE);
+                u.h.setTag(k);
+                return u;
             });
+            Histogram unionHgrm = union.h;
+            final int unionIndex = union.index;
 
             long nextStart = next.getStartTimeStamp();
             long nextEnd = next.getEndTimeStamp();
-            long unionStart = union.getStartTimeStamp();
-            long unionEnd = union.getEndTimeStamp();
+
+            long unionStart = unionHgrm.getStartTimeStamp();
+            long unionEnd = unionHgrm.getEndTimeStamp();
             // iterators are sorted, so we know nextStart >= unionStart
             boolean rollover = false;
 
             // new union
             if (unionStart == Long.MAX_VALUE)
             {
-                i = addNext(i, next, union);
+                addNext(input.source(), unionIndex, next, unionHgrm);
                 // expand union length to allow more intervals to fall into the same union
-                if (union.getEndTimeStamp() - union.getStartTimeStamp() < targetUnionMs)
+                if (unionHgrm.getEndTimeStamp() - unionHgrm.getStartTimeStamp() < targetUnionMs)
                 {
-                    union.setEndTimeStamp(union.getStartTimeStamp()  + targetUnionMs);
+                    unionHgrm.setEndTimeStamp(unionHgrm.getStartTimeStamp()  + targetUnionMs);
                 }
             }
             // next interval is inside union interval
             else if (nextStart < unionEnd && nextEnd <= unionEnd)
             {
-                i = addNext(i, next, union);
+                addNext(input.source(), unionIndex, next, unionHgrm);
             }
             // next interval starts before the end of this interval, but is not contained by it
             else if (nextStart < unionEnd)
@@ -104,10 +116,10 @@ public class UnionHistograms implements Runnable
                 // 80% or more of next is in fact in the current union 
                 if (overlap > 0.8)
                 {
-                    i = addNext(i, next, union);
+                    addNext(input.source(), unionIndex, next, unionHgrm);
                     // prevent an ever expanding union
-                    union.setStartTimeStamp(unionStart);
-                    union.setEndTimeStamp(unionEnd);
+                    unionHgrm.setStartTimeStamp(unionStart);
+                    unionHgrm.setEndTimeStamp(unionEnd);
                 }
                 else
                 {
@@ -120,16 +132,18 @@ public class UnionHistograms implements Runnable
             }
             if (rollover)
             {
-                i = outputUnion(i, union);
-                union.reset();
-                union.setEndTimeStamp(0L);
-                union.setStartTimeStamp(Long.MAX_VALUE);
-                union.setTag(next.getTag());
-                i = addNext(i, next, union);
+                outputUnion(unionIndex, unionHgrm);
+                final int unionIndexNext = ++union.index;
+                unionHgrm.reset();
+                unionHgrm.setEndTimeStamp(0L);
+                unionHgrm.setStartTimeStamp(Long.MAX_VALUE);
+                unionHgrm.setTag(next.getTag());
+                
+                addNext(input.source(), unionIndexNext, next, unionHgrm);
                 // expand union length to allow more intervals to fall into the same union
-                if (union.getEndTimeStamp() - union.getStartTimeStamp() < targetUnionMs)
+                if (unionHgrm.getEndTimeStamp() - unionHgrm.getStartTimeStamp() < targetUnionMs)
                 {
-                    union.setEndTimeStamp(union.getStartTimeStamp()  + targetUnionMs);
+                    unionHgrm.setEndTimeStamp(unionHgrm.getStartTimeStamp()  + targetUnionMs);
                 }
             }
             // trim and sort
@@ -137,32 +151,31 @@ public class UnionHistograms implements Runnable
             Collections.sort(ins);
         }
         // write last hgrms
-        for (Histogram u : unionedByTag.values())
+        for (UnionHistogram u : unionedByTag.values())
         {
-            i = outputUnion(i, u);
+            outputUnion(u.index, u.h);
         }
     }
 
-    private int outputUnion(int i, Histogram union)
+    private void outputUnion(int i, Histogram union)
     {
         if (verbose)
         {
             verboseOut.print("union, ");
-            HdrHistogramUtil.logHistogramForVerbose(verboseOut, union, i++);
+            HdrHistogramUtil.logHistogramForVerbose(verboseOut, union, i);
         }
         output.accept(union);
-        return i;
     }
 
-    private int addNext(int i, Histogram next, Histogram union)
+    private void addNext(String source, int i, Histogram next, Histogram union)
     {
         union.add(next);
         if (verbose)
         {
-            verboseOut.print("input, ");
-            HdrHistogramUtil.logHistogramForVerbose(verboseOut, next, i++);
+            verboseOut.print(source);
+            verboseOut.print(", ");
+            HdrHistogramUtil.logHistogramForVerbose(verboseOut, next, i);
         }
-        return i;
     }
 
 }

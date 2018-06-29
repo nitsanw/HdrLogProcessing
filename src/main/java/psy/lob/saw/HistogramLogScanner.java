@@ -63,7 +63,6 @@ import java.util.zip.DataFormatException;
  */
 public class HistogramLogScanner implements Closeable
 {
-
     // can't use lambdas, and anyway we need to let the handler take the exception
     public interface EncodableHistogramSupplier
     {
@@ -173,6 +172,7 @@ public class HistogramLogScanner implements Closeable
     }
 
     private final LazyHistogramReader lazyReader;
+    private final String source;
     protected final Scanner scanner;
 
     /**
@@ -181,7 +181,7 @@ public class HistogramLogScanner implements Closeable
      */
     public HistogramLogScanner(final String inputFileName) throws FileNotFoundException
     {
-        this(new Scanner(new File(inputFileName)));
+        this(new Scanner(new File(inputFileName)), inputFileName);
     }
 
     /**
@@ -189,7 +189,7 @@ public class HistogramLogScanner implements Closeable
      */
     public HistogramLogScanner(final InputStream inputStream)
     {
-        this(new Scanner(inputStream));
+        this(new Scanner(inputStream), inputStream.toString());
     }
 
     /**
@@ -198,13 +198,14 @@ public class HistogramLogScanner implements Closeable
      */
     public HistogramLogScanner(final File inputFile) throws FileNotFoundException
     {
-        this(new Scanner(inputFile));
+        this(new Scanner(inputFile), inputFile.getName());
     }
 
-    private HistogramLogScanner(Scanner scanner)
+    private HistogramLogScanner(Scanner scanner, String source)
     {
         this.scanner = scanner;
         this.lazyReader = new LazyHistogramReader(scanner);
+        this.source = source;
         initScanner();
     }
 
@@ -319,5 +320,10 @@ public class HistogramLogScanner implements Closeable
     public boolean hasNextLine()
     {
         return scanner.hasNextLine();
+    }
+
+    public String source()
+    {
+        return source;
     }
 }
