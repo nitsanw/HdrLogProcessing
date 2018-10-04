@@ -11,7 +11,7 @@ class ParseAndRunUtil
             parser.parseArgument(args);
             app.run();
         }
-        catch (CmdLineException e)
+        catch (CmdLineException | IllegalArgumentException e)
         {
             System.out.println(e.getMessage());
             parser.printUsage(System.out);

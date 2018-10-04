@@ -1,4 +1,5 @@
 import org.HdrHistogram.Histogram;
+import org.HdrHistogram.HistogramIterationValue;
 import org.kohsuke.args4j.Option;
 import psy.lob.saw.OrderedHistogramLogReader;
 
@@ -25,7 +26,7 @@ public class SummarizeHistogramLogs implements Runnable
     public double end = Double.MAX_VALUE;
     @Option(name = "-verbose", aliases = "-v", usage = "verbose logging, (default: false)", required = false)
     public boolean verbose = false;
-    @Option(name = "-summaryType", aliases = "-st", usage = "summary type: csv, percentiles, hgrm", required = false)
+    @Option(name = "-summaryType", aliases = "-st", usage = "summary type: percentiles, csv [linear buckets], csve [exponential buckets],  csvr [raw hdr buckets],  hgrm (default: percentiles)", required = false)
     public SummaryType summaryType = SummaryType.PERCENTILES;
     @Option(name = "-percentilesOutputTicksPerHalf", aliases = "-tph", usage = "ticks per half percentile, used for hgrm output, (default: 5)", required = false)
     public int percentilesOutputTicksPerHalf = 5;
@@ -35,6 +36,21 @@ public class SummarizeHistogramLogs implements Runnable
     public long outputBucketSize = 100;
     @Option(name = "-outputFile", aliases = "-of", usage = "set an output file destination, default goes to sysout", required = false)
     public String outputFile;
+    @Option(name = "-excludeTag", aliases = "-excT", usage = "add a tag to filter from input, 'default' is a special tag for the null tag.", required = false)
+    public void addExcludeTag(String tag)
+    {
+        excludeTags.add(tag);
+    }
+
+    @Option(name = "-includeTag", aliases = "-incT", usage = "when include tags are used only the explicitly included will be split out, 'default' is a special tag for the null tag.", required = false)
+    public void addIncludeTag(String tag)
+    {
+        includeTags.add(tag);
+    }
+    private Set<String> excludeTags = new HashSet<>();
+    private Set<String> includeTags = new HashSet<>();
+
+
     private File inputPath = new File(".");
     private Set<File> inputFiles = new HashSet<>();
 
@@ -97,7 +113,7 @@ public class SummarizeHistogramLogs implements Runnable
         }
         if (inputFiles.isEmpty())
         {
-            return;
+            throw new IllegalArgumentException("Error: please specify inputs");
         }
 
         try
@@ -122,7 +138,11 @@ public class SummarizeHistogramLogs implements Runnable
             {
                 System.out.println("Summarizing file: " + inputFile.getName());
             }
-            OrderedHistogramLogReader reader = new OrderedHistogramLogReader(inputFile, start, end);
+            OrderedHistogramLogReader reader = new OrderedHistogramLogReader(
+                inputFile,
+                start,
+                end,
+                tag -> shouldSkipTag(tag));
             Histogram interval;
             int i = 0;
             boolean first = true;
@@ -194,6 +214,12 @@ public class SummarizeHistogramLogs implements Runnable
                 case CSV:
                     printCsv(out, sum);
                     break;
+                case CSVE:
+                    printCsvE(out, sum);
+                    break;
+                case CSVR:
+                    printCsvR(out, sum);
+                    break;
                 case HGRM:
                     printHgrm(out, sum);
                     break;
@@ -202,7 +228,13 @@ public class SummarizeHistogramLogs implements Runnable
             }
         }
     }
-
+    
+    private boolean shouldSkipTag(String ntag)
+    {
+        ntag = (ntag == null) ? "default" : ntag;
+        return excludeTags.contains(ntag) || (!includeTags.isEmpty() && !includeTags.contains(ntag));
+    }
+    
     private PrintStream getOut(String tag) throws FileNotFoundException
     {
         PrintStream report = System.out;
@@ -227,6 +259,7 @@ public class SummarizeHistogramLogs implements Runnable
         out.printf("%sThroughput(ops/sec)=%.2f%n", tag, avgThpt);
         out.printf("%sMin=%d%n", tag, (long) (sum.getMinValue() / outputValueUnitRatio));
         out.printf("%sMean=%.2f%n", tag, sum.getMean() / outputValueUnitRatio);
+        out.printf("%sStdDev=%.2f%n", tag, sum.getStdDeviation() / outputValueUnitRatio);
         out.printf("%s50.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(50) / outputValueUnitRatio));
         out.printf("%s90.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(90) / outputValueUnitRatio));
         out.printf("%s99.000ptile=%d%n", tag, (long) (sum.getValueAtPercentile(99) / outputValueUnitRatio));
@@ -252,9 +285,57 @@ public class SummarizeHistogramLogs implements Runnable
             out.println(count);
         }
     }
+    
+    private void printCsvE(PrintStream out, Histogram sum)
+    {
+        long max = (long) (sum.getMaxValue() / outputValueUnitRatio);
+        long bucketStart = 0;
+        out.println("BucketStart, Count");
+        while (bucketStart < max)
+        {
+            long nextBucketStart = (bucketStart == 0) ? outputBucketSize : bucketStart * 2;
+            long s = (long) (bucketStart * outputValueUnitRatio);
+            long e = (long) (nextBucketStart * outputValueUnitRatio);
+            long count = sum.getCountBetweenValues(s, e);
+            out.print(bucketStart);
+            out.print(",");
+            out.println(count);
+            bucketStart = nextBucketStart;
+        }
+    }
+
+    private void printCsvR(PrintStream out, Histogram sum)
+    {
+        out.println("BucketStart, Count");
+        long currentValue = -1;
+        long currentValueCount = 0;
+        for (HistogramIterationValue value : sum.recordedValues())
+        {
+            long newValue = (long) (value.getValueIteratedTo() / outputValueUnitRatio);
+            if (newValue != currentValue)
+            {
+                if (currentValueCount != 0)
+                {
+                    out.print(currentValue);
+                    out.print(",");
+                    out.println(currentValueCount);
+                    currentValueCount = 0;
+                }
+                currentValue = newValue;
+            }
+            currentValueCount += value.getCountAtValueIteratedTo();
+        }
+        // last value
+        if (currentValueCount != 0)
+        {
+            out.print(currentValue);
+            out.print(",");
+            out.println(currentValueCount);
+        }
+    }
 
     enum SummaryType
     {
-        CSV, PERCENTILES, HGRM
+        CSV, CSVE, CSVR, PERCENTILES, HGRM
     }
 }
